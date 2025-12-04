@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rangista – Auth Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    body { 
+      font-family: Arial; 
+      max-width: 600px; 
+      margin: 40px auto; 
+      padding: 20px; 
+      background: #f4f4f4;
+    }
+    h1, h2 { text-align: center; }
+    input, button {
+      padding: 12px;
+      width: 100%;
+      margin: 8px 0;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background: #e91e63;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background: #c2185b; }
+
+    .box {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #status {
+      padding: 15px; 
+      text-align: center; 
+      border-radius: 8px; 
+      font-weight: bold; 
+      display: none;
+      margin: 20px 0;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+
+<body>
+
+  <h1>Rangista Auth Testing</h1>
+  <h3 id="userStatus" style="text-align:center; color:#333; margin-top:10px;"></h3>
+
+  <div id="status"></div>
+
+  <!-- SIGNUP BOX -->
+  <div class="box">
+    <h2>Signup</h2>
+
+    <input id="email" type="email" placeholder="Email" value="test@example.com">
+    <input id="password" type="password" placeholder="Password" value="123456">
+    <input id="username" type="text" placeholder="Username" value="testuser">
+    <input id="name" type="text" placeholder="Full Name" value="Test User">
+    <input id="phone" type="text" placeholder="Phone" value="03001234567">
+    <input id="address" type="text" placeholder="Address" value="Lahore, Pakistan">
+    <input id="country" type="text" placeholder="Country" value="Pakistan">
+    <input id="city" type="text" placeholder="City" value="Lahore">
+
+    <button onclick="signUp()">Create Account</button>
+  </div>
+
+  <!-- LOGIN BOX -->
+  <div class="box">
+    <h2>Login</h2>
+
+    <input id="login_email" type="email" placeholder="Email">
+    <input id="login_password" type="password" placeholder="Password">
+
+    <button onclick="login()">Login</button>
+    <button onclick="logout()">Logout</button>
+
+    <p><strong>Stored Token:</strong></p>
+    <textarea id="tokenBox" rows="4" style="width:100%;"></textarea>
+  </div>
+
+  <script>
+    const { createClient } = supabase;
+
+    const supabaseClient = createClient(
+      "https://cgnxzhlufpomntqygmvk.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNnbnh6aGx1ZnBvbW50cXlnbXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NDI0NDQsImV4cCI6MjA4MDIxODQ0NH0.iIjDMMAiYK_AVk7Jovc0gbxZWsVjnNbedj4nXIhfftM"
+    );
+
+    const BACKEND_URL = "http://localhost:8000";
+
+    function showStatus(msg, success = true) {
+      const s = document.getElementById("status");
+      s.style.display = "block";
+      s.className = success ? "success" : "error";
+      s.textContent = msg;
+    }
+
+    function updateTokenBox() {
+      document.getElementById("tokenBox").value = localStorage.getItem("token") || "";
+    }
+
+    function showUserStatus(user) {
+      const el = document.getElementById("userStatus");
+      if (user) {
+        el.textContent = `✅ Logged in as: ${user.email}`;
+      } else {
+        el.textContent = `❌ Not logged in`;
+      }
+    }
+
+    // ---------------------- SIGNUP ----------------------
+    async function signUp() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const username = document.getElementById("username").value.trim();
+      const name = document.getElementById("name").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+      const address = document.getElementById("address").value.trim();
+      const country = document.getElementById("country").value.trim();
+      const city = document.getElementById("city").value.trim();
+
+      showStatus("Creating account...");
+
+      const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({ email, password });
+      if (signUpError) return showStatus("Signup failed: " + signUpError.message, false);
+
+      const { data: loginData, error: loginError } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (loginError) return showStatus("Auto login failed!", false);
+
+      const token = loginData.session.access_token;
+      localStorage.setItem("token", token);
+      updateTokenBox();
+
+      const res = await fetch(BACKEND_URL + "/profiles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({
+          username, email, name,
+          contact_number: phone,
+          permanent_address: address,
+          country, city,
+          contact_number_2: null
+        })
+      });
+
+      if (!res.ok) return showStatus("Backend failed: " + (await res.text()), false);
+
+      showStatus("Signup Success! User created + Welcome Email sent!", true);
+      showUserStatus({ email });
+    }
+
+    // ---------------------- LOGIN ----------------------
+    async function login() {
+      const email = document.getElementById("login_email").value.trim();
+      const password = document.getElementById("login_password").value.trim();
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) return showStatus("Login Failed: " + error.message, false);
+
+      const token = data.session.access_token;
+      localStorage.setItem("token", token);
+      updateTokenBox();
+
+      showStatus("Login Successful!", true);
+      showUserStatus(data.user);
+    }
+
+    // ---------------------- LOGOUT ----------------------
+    async function logout() {
+      await supabaseClient.auth.signOut();
+      localStorage.removeItem("token");
+      updateTokenBox();
+      showUserStatus(null);
+      showStatus("Logged out!", true);
+    }
+
+    // ---------------------- AUTO STATUS ----------------------
+    async function init() {
+      updateTokenBox();
+
+      const { data } = await supabaseClient.auth.getSession();
+      if (data.session) {
+        showUserStatus(data.session.user);
+        localStorage.setItem("token", data.session.access_token);
+      } else {
+        showUserStatus(null);
+      }
+
+      supabaseClient.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          localStorage.setItem("token", session.access_token);
+          updateTokenBox();
+          showUserStatus(session.user);
+        } else {
+          localStorage.removeItem("token");
+          updateTokenBox();
+          showUserStatus(null);
+        }
+      });
+    }
+
+    init();
+  </script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rangista – Final Working Signup</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; max-width: 500px; margin: 60px auto; padding: 20px; background: #f8f9fa; text-align: center; }
+    input, button { padding: 14px; margin: 10px 0; width: 90%; font-size: 16px; border-radius: 8px; border: 1px solid #ddd; }
+    button { background: #e91e63; color: white; font-weight: bold; cursor: pointer; }
+    button:hover { background: #c2185b; }
+    .status { padding: 15px; margin: 20px; border-radius: 8px; font-weight: bold; font-size: 18px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+
+  <h1>Rangista Signup</h1>
+  <p>Gmail welcome email + users table entry</p>
+
+  <input type="email" id="email" placeholder="Email" value="test@example.com" />
+  <input type="password" id="password" placeholder="Password" value="123456" />
+  <input type="text" id="username" placeholder="Username" value="testuser" />
+  <input type="text" id="name" placeholder="Name (optional)" value="Test User" />
+  <input type="text" id="phone" placeholder="Phone" value="03001234567" />
+  <input type="text" id="address" placeholder="Address" value="Lahore, Pakistan" />
+  <input type="text" id="country" placeholder="Country" value="Pakistan" />
+  <input type="text" id="city" placeholder="City" value="Lahore" />
+
+  <button onclick="signUp()">SIGN UP NOW</button>
+  <div id="status" class="status success" style="display:none;"></div>
+
+  <script>
+    const { createClient } = supabase;
+    const supabaseClient = createClient(
+      'https://cgnxzhlufpomntqygmvk.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNnbnh6aGx1ZnBvbW50cXlnbXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NDI0NDQsImV4cCI6MjA4MDIxODQ0NH0.iIjDMMAiYK_AVk7Jovc0gbxZWsVjnNbedj4nXIhfftM'
+    );
+
+    // IMPORTANT: Ye URL ab live server se serve hona chahiye
+    const BACKEND_URL = 'http://localhost:8000';
+
+    async function signUp() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const username = document.getElementById('username').value.trim();
+      const name = document.getElementById('name').value.trim() || "Customer";
+      const phone = document.getElementById('phone').value.trim();
+      const address = document.getElementById('address').value.trim();
+      const country = document.getElementById('country').value.trim();
+      const city = document.getElementById('city').value.trim();
+
+      const status = document.getElementById('status');
+      status.style.display = 'block';
+      status.className = 'status';
+      status.textContent = 'Creating account...';
+
+      // 1. Signup
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) return status.textContent = 'Error: ' + error.message, status.className += ' error';
+
+      // 2. Auto login
+      const { data: loginData, error: loginError } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (loginError) return status.textContent = 'Auto login failed!', status.className += ' error';
+
+      const token = loginData.session.access_token;
+
+      // 3. Call backend
+      const res = await fetch(`${BACKEND_URL}/profiles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username, email, name,
+          contact_number: phone,
+          permanent_address: address,
+          country, city,
+          contact_number_2: null
+        })
+      });
+
+      if (res.ok) {
+        status.textContent = 'SUCCESS! User created in auth + users table + Gmail welcome email sent!';
+        status.className = 'status success';
+      } else {
+        const txt = await res.text();
+        status.textContent = 'Backend failed: ' + txt;
+        status.className += ' error';
+      }
+    }
+  </script>
+</body>
+</html> -->
