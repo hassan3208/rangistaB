@@ -443,7 +443,93 @@ def remove_from_cart(db: Session, user_id: str, product_id: str, size: str):
 # ORDER FUNCTIONS
 # -------------------------
 def get_all_orders(db: Session):
-    return db.query(models.Order).all()
+    # Fetch summarized order data
+    raw_orders = (
+        db.query(
+            models.Order.id.label("order_id"),
+            models.Order.user_id,
+            models.User.username,
+            models.Order.status,
+            func.count(models.OrderItem.id).label("total_products"),
+            func.sum(
+                models.OrderItem.quantity * case(
+                    (models.OrderItem.size == "XS", models.Product.XS_price),
+                    (models.OrderItem.size == "S", models.Product.S_price),
+                    (models.OrderItem.size == "M", models.Product.M_price),
+                    (models.OrderItem.size == "L", models.Product.L_price),
+                    (models.OrderItem.size == "XL", models.Product.XL_price),
+                    (models.OrderItem.size == "XXL", models.Product.XXL_price),
+                    else_=0
+                )
+            ).label("total_price"),
+            models.Order.time.label("order_time")
+        )
+        .join(models.User, models.Order.user_id == models.User.id)
+        .join(models.OrderItem, models.Order.id == models.OrderItem.order_id)
+        .join(models.Product, models.OrderItem.product_id == models.Product.id)
+        .group_by(models.Order.id, models.User.username)
+        .all()
+    )
+
+    final_results = []
+
+    for order in raw_orders:
+        # Fetch all products inside each order
+        order_items = (
+            db.query(
+                models.OrderItem.product_id,
+                models.OrderItem.quantity,
+                models.OrderItem.size,
+                models.Product.name.label("product_name"),
+                models.Product.XS_price,
+                models.Product.S_price,
+                models.Product.M_price,
+                models.Product.L_price,
+                models.Product.XL_price,
+                models.Product.XXL_price,
+            )
+            .join(models.Product, models.OrderItem.product_id == models.Product.id)
+            .filter(models.OrderItem.order_id == order.order_id)
+            .all()
+        )
+
+        # Build product list for this order
+        products = []
+        for item in order_items:
+            unit_price = (
+                item.XS_price if item.size == "XS" else
+                item.S_price if item.size == "S" else
+                item.M_price if item.size == "M" else
+                item.L_price if item.size == "L" else
+                item.XL_price if item.size == "XL" else
+                item.XXL_price
+            )
+
+            products.append(
+                schemas.OrderProduct(
+                    product_id=item.product_id,
+                    product_name=item.product_name,
+                    quantity=item.quantity,
+                    size=item.size,
+                    price=unit_price * item.quantity
+                )
+            )
+
+        # Convert into schema output
+        final_results.append(
+            schemas.OrderResponse(
+                order_id=order.order_id,
+                user_id=order.user_id,
+                username=order.username,
+                status=order.status,
+                total_products=order.total_products,
+                total_price=int(order.total_price or 0),
+                order_time=order.order_time,
+                products=products
+            )
+        )
+
+    return final_results
 
 def get_user_orders(db: Session, user_id: str):
     results = (
