@@ -145,6 +145,7 @@ class CartProduct(BaseModel):
     product_id: str
     price: int
     color: Optional[str] = None
+    discount: int    # ← ADD THIS
 
     class Config:
         from_attributes = True
@@ -162,6 +163,8 @@ class OrderProduct(BaseModel):
     size: str
     product_id: str
     price: int  # Added price field
+    color: Optional[str] = None
+    discount: int = 0
 
 class OrderResponse(BaseModel):
     order_id: int
@@ -172,7 +175,6 @@ class OrderResponse(BaseModel):
     total_price: int  # Added total_price field
     products: List[OrderProduct]
     order_time: date
-    color: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -194,6 +196,7 @@ class CartUpdate(BaseModel):
     user_id: str
     product_id: str
     size: str
+    color: Optional[str] = None
     quantity: int
     
 class CartCreate(BaseModel):
@@ -215,6 +218,7 @@ class CartRemoveRequest(BaseModel):
     user_id: str
     product_id: str
     size: str
+    color: Optional[str] = None
     
     
 class ForgotPasswordRequest(BaseModel):
