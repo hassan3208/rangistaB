@@ -356,49 +356,65 @@ def create_product_review(
 # NEW: UPDATE CART ITEM (quantity or remove if 0)
 @app.put("/cart/update", response_model=schemas.CartResponse)
 def update_cart_item(
-    payload: schemas.CartUpdate,                           # ← This is now a Pydantic model
+    payload: schemas.CartUpdate,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: Session = Depends(database.get_db)
 ):
     token_user_id = verify_token(credentials)
-    if token_user_id != payload.user_id:                  # ← Use payload.user_id (not .get())
+    if token_user_id != payload.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if payload.quantity <= 0:
-        success = crud.remove_from_cart(db, payload.user_id, payload.product_id, payload.size)
+        success = crud.remove_from_cart(
+            db,
+            payload.user_id,
+            payload.product_id,
+            payload.size,
+            payload.color
+        )
     else:
-        success = crud.update_cart_quantity(db, payload.user_id, payload.product_id, payload.size, payload.quantity)
+        success = crud.update_cart_quantity(
+            db,
+            payload.user_id,
+            payload.product_id,
+            payload.size,
+            payload.color,
+            payload.quantity
+        )
 
     if not success:
         raise HTTPException(status_code=404, detail="Cart item not found")
 
     return crud.get_user_cart(db, payload.user_id)
 
+
 # -------------------------
 # REMOVE FROM CART
 # -------------------------
 @app.delete("/cart/remove", response_model=schemas.CartResponse)
 def remove_cart_item(
-    remove_data: schemas.CartRemoveRequest,  # { "user_id", "product_id", "size" }
+    remove_data: schemas.CartRemoveRequest,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: Session = Depends(database.get_db)
 ):
     token_user_id = verify_token(credentials)
-    user_id = remove_data.user_id
-    product_id = remove_data.product_id
-    size = remove_data.size
 
-    if not all([user_id, product_id, size]):
-        raise HTTPException(status_code=400, detail="Missing required fields")
-
-    if token_user_id != user_id:
+    if token_user_id != remove_data.user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    success = crud.remove_from_cart(db, user_id, product_id, size)
+    success = crud.remove_from_cart(
+        db,
+        remove_data.user_id,
+        remove_data.product_id,
+        remove_data.size,
+        remove_data.color
+    )
+
     if not success:
         raise HTTPException(status_code=404, detail="Cart item not found")
 
-    return crud.get_user_cart(db, user_id)
+    return crud.get_user_cart(db, remove_data.user_id)
+
 
 # -------------------------
 # ADD TO CART
