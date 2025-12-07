@@ -415,6 +415,19 @@ def add_to_cart(db: Session, cart_item: schemas.CartCreate):
             color=cart_item.color
         )
         db.add(new_item)
+    
+    
+    # --- UPDATE STOCK ---
+    product = db.query(models.Product).filter(models.Product.id == cart_item.product_id).first()
+    stock_col = f"{cart_item.size}_stock"
+    
+    current_stock = getattr(product, stock_col)
+    if current_stock < cart_item.quantity:
+        raise HTTPException(status_code=400, detail="Not enough stock")
+    
+    setattr(product, stock_col, current_stock - cart_item.quantity)
+# ---------------------    
+    
     db.commit()
     return True
 
@@ -427,6 +440,27 @@ def update_cart_quantity(db: Session, user_id: str, product_id: str, size: str,c
     ).first()
     if not item:
         return False
+    
+    
+    # --- STOCK ADJUSTMENT ---
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    stock_col = f"{size}_stock"
+    
+    old_qty = item.quantity
+    
+    if quantity > old_qty:  # increasing cart qty
+        diff = quantity - old_qty
+        if getattr(product, stock_col) < diff:
+            raise HTTPException(status_code=400, detail="Not enough stock")
+        setattr(product, stock_col, getattr(product, stock_col) - diff)
+    
+    elif quantity < old_qty:  # decreasing cart qty
+        diff = old_qty - quantity
+        setattr(product, stock_col, getattr(product, stock_col) + diff)
+    # -------------------------
+
+    
+    
     if quantity <= 0:
         db.delete(item)
     else:
@@ -443,6 +477,16 @@ def remove_from_cart(db: Session, user_id: str, product_id: str, size: str, colo
     ).first()
     if not item:
         return False
+    
+    
+    # --- RETURN STOCK ---
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    stock_col = f"{size}_stock"
+    setattr(product, stock_col, getattr(product, stock_col) + item.quantity)
+    # --------------------
+
+    
+    
     db.delete(item)
     db.commit()
     return True
