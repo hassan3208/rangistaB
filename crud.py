@@ -7,6 +7,7 @@ from typing import Optional, List
 import models, schemas
 import json
 from fastapi import HTTPException
+from datetime import datetime, timedelta
 
 # -------------------------
 # USER FUNCTIONS
@@ -496,6 +497,21 @@ def remove_from_cart(db: Session, user_id: str, product_id: str, size: str, colo
 # ORDER FUNCTIONS
 # -------------------------
 def get_all_orders(db: Session):
+
+    # ---- LAST 30 DAYS FILTER ----
+    today = datetime.utcnow().date()
+    last_month = today - timedelta(days=30)
+
+    # ---- CUSTOM ORDER FOR STATUS ----
+    status_order = case(
+        (models.Order.status == "pending", 1),
+        (models.Order.status == "processing", 2),
+        (models.Order.status == "shipped", 3),
+        (models.Order.status == "delivered", 4),
+        (models.Order.status == "cancelled", 5),
+        else_=6
+    )
+
     raw_orders = (
         db.query(
             models.Order.id.label("order_id"),
@@ -520,6 +536,13 @@ def get_all_orders(db: Session):
         .join(models.User, models.Order.user_id == models.User.id)
         .join(models.OrderItem, models.Order.id == models.OrderItem.order_id)
         .join(models.Product, models.OrderItem.product_id == models.Product.id)
+
+        # ---- FILTER: ONLY LAST 30 DAYS ----
+        .filter(models.Order.time >= last_month)
+
+        # ---- SORT BY STATUS → THEN NEWEST ----
+        .order_by(status_order, models.Order.time.desc())
+
         .group_by(models.Order.id, models.User.username)
         .all()
     )
