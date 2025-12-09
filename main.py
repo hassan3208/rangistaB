@@ -126,31 +126,17 @@ async def create_profile(
 # FORGOT PASSWORD
 # -------------------------
 @app.post("/auth/forgot-password")
-def forgot_password(
-    request: schemas.ForgotPasswordRequest,
-    db: Session = Depends(database.get_db)
-):
-    user = crud.get_user_by_email(db, request.email)
-    if not user:
-        raise HTTPException(status_code=404, detail="Email not found")
-
-    # Supabase Password Reset API
-    reset_url = f"{SUPABASE_URL}/auth/v1/recover"
-
-    # IMPORTANT: Tell Supabase where to redirect after clicking email link
-    redirect_link = "http://localhost:5173/reset-password"   # LOCAL TESTING
-
-    # For Production:
-    # redirect_link = "https://your-frontend.vercel.app/reset-password"
-
-    payload = {
-        "email": request.email,
-        "redirect_to": redirect_link
-    }
+def magic_login(request: schemas.ForgotPasswordRequest):
+    redirect_url = "https://rangistaf.vercel.app/auth/callback"
+    # For production:
+    # redirect_url = "https://your-frontend.vercel.app/auth/callback"
 
     res = requests.post(
-        reset_url,
-        json=payload,
+        f"{SUPABASE_URL}/auth/v1/magiclink",
+        json={
+            "email": request.email,
+            "redirect_to": redirect_url
+        },
         headers={
             "apikey": SUPABASE_SERVICE_ROLE,
             "Content-Type": "application/json"
@@ -158,10 +144,11 @@ def forgot_password(
     )
 
     if res.status_code not in [200, 204]:
-        print("Supabase response:", res.text)
-        raise HTTPException(status_code=500, detail="Failed to send reset email")
+        print("Supabase Magic Link Error:", res.text)
+        raise HTTPException(500, "Failed to send magic login link")
 
-    return {"message": "Password reset email sent successfully"}
+    return {"message": "Magic login link sent successfully"}
+
 
 
 
