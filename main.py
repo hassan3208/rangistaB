@@ -126,8 +126,10 @@ async def create_profile(
 # FORGOT PASSWORD
 # -------------------------
 @app.post("/auth/forgot-password")
-def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depends(database.get_db)):
-
+def forgot_password(
+    request: schemas.ForgotPasswordRequest,
+    db: Session = Depends(database.get_db)
+):
     user = crud.get_user_by_email(db, request.email)
     if not user:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -135,9 +137,20 @@ def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depend
     # Supabase Password Reset API
     reset_url = f"{SUPABASE_URL}/auth/v1/recover"
 
+    # IMPORTANT: Tell Supabase where to redirect after clicking email link
+    redirect_link = "http://localhost:5173/reset-password"   # LOCAL TESTING
+
+    # For Production:
+    # redirect_link = "https://your-frontend.vercel.app/reset-password"
+
+    payload = {
+        "email": request.email,
+        "redirect_to": redirect_link
+    }
+
     res = requests.post(
         reset_url,
-        json={"email": request.email},
+        json=payload,
         headers={
             "apikey": SUPABASE_SERVICE_ROLE,
             "Content-Type": "application/json"
@@ -145,9 +158,11 @@ def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depend
     )
 
     if res.status_code not in [200, 204]:
+        print("Supabase response:", res.text)
         raise HTTPException(status_code=500, detail="Failed to send reset email")
 
     return {"message": "Password reset email sent successfully"}
+
 
 
 
